@@ -27,6 +27,15 @@ _PYRO_CONFIG = {
     "NS_BCPORT": 9091,
     "NS_BCHOST": None,
     "SERVERTYPE": "thread",
+    "SSL": False,
+    "SSL_SERVERCERT": "",
+    "SSL_SERVERKEY": "",
+    "SSL_SERVERKEYPASSWD": "",
+    "SSL_REQUIRECLIENTCERT": False,
+    "SSL_CLIENTCERT": "",
+    "SSL_CLIENTKEY": "",
+    "SSL_CLIENTKEYPASSWD": "",
+    "SSL_CACERTS": "",
 }
 
 _PYROLAB_CONFIG = {
