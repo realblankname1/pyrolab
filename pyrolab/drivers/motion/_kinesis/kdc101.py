@@ -30,6 +30,7 @@ from ctypes import (
     c_double,
     create_string_buffer,
     cast,
+    pointer,
 )
 from ctypes.wintypes import DWORD, WORD
 
@@ -42,8 +43,8 @@ from pyrolab.drivers.motion._kinesis import KinesisInstrument, ERROR_CODES
 KCube_DC_Servo_Device_ID = 27
 
 def check_error(status):
-    if status.value != 0 and status.value in ERROR_CODES.keys():
-        raise RuntimeError(ERROR_CODES[status.value])
+    if status != 0 and status in ERROR_CODES.keys():
+        raise RuntimeError(ERROR_CODES[status])
 
 if kcdc.TLI_BuildDeviceList() == 0:
     size = kcdc.TLI_GetDeviceListSize()
@@ -90,7 +91,7 @@ class KDC101(KinesisInstrument):
         kcdc.CC_ClearMessageQueue(self._serialno)
 
         # Is this necessary?
-        self.wait_for_completion()
+        # self.wait_for_completion()
 
         if home:
             if not kcdc.CC_CanHome(self._serialno).value:
@@ -104,12 +105,13 @@ class KDC101(KinesisInstrument):
             self.homed = False
 
         # The following are in device units
-        self._max_pos = kcdc.CC_GetStageAxisMaxPosition(self._serialno)
-        self._min_pos = kcdc.CC_GetStageAxisMinPosition(self._serialno)
+        self._max_pos = kcdc.CC_GetStageAxisMaxPos(self._serialno)
+        self._min_pos = kcdc.CC_GetStageAxisMinPos(self._serialno)
 
 
 
     def __del__(self):
+        kcdc.CC_StopPolling(self._serialno)
         kcdc.CC_Close(self._serialno)
 
     def _real_value_from_du(self, du, unit_type):
@@ -125,9 +127,9 @@ class KDC101(KinesisInstrument):
             velocity, or ``2`` for acceleration.
         """
         real_unit = c_double()
-        status = kcdc.GetRealValueFromDeviceUnit(self._serialno, c_int(du), byref(real_unit), c_int(unit_type))
+        status = kcdc.CC_GetRealValueFromDeviceUnit(self._serialno, c_int(du), pointer(real_unit), c_int(unit_type))
         check_error(status)
-        return real_unit.value
+        return real_unit
 
     def _du_from_real_value(self, real, unit_type):
         """
@@ -140,7 +142,7 @@ class KDC101(KinesisInstrument):
             velocity, or ``2`` for acceleration.
         """
         device_unit = c_int()
-        status = kcdc.GetDeviceUnitFromRealValue(self._serialno, c_double(real), byref(device_unit), c_int(unit_type))
+        status = kcdc.CC_GetDeviceUnitFromRealValue(self._serialno, c_double(real), byref(device_unit), c_int(unit_type))
         check_error(status)
         return device_unit.value
 
@@ -179,8 +181,12 @@ class KDC101(KinesisInstrument):
     @property
     def jog_mode(self):
         """
-        The jog mode, either ``stepped`` (fixed distance, single step) or 
-        ``continuous`` (move continuously until stopped).
+        The jog mode, either 1 - stepped (fixed distance, single step) or 
+        2 - continuous (move continuously until stopped).
+        
+        The stop mode for jog moves, either 1 - immediate (motor stops 
+        immediately) or 2 - profiled (motor stops using current velocity 
+            profile).
         """
         # TODO: Cross reference CC_GetJogMode docs and MOT_JogModes to make
         # sure the enum values are right!
@@ -196,44 +202,69 @@ class KDC101(KinesisInstrument):
 
     @jog_mode.setter
     def jog_mode(self, mode="stepped"):
-        pass
-
-    @property
-    def jog_stop_mode(self):
         """
-        The stop mode for jog moves, either ``immediate`` (motor stops 
-        immediately) or ``profiled`` (motor stops using current velocity 
+        The jog mode, either 1 - stepped (fixed distance, single step) or 
+        2 - continuous (move continuously until stopped).
+        
+        The stop mode for jog moves, either 1 - immediate (motor stops 
+        immediately) or 2 - profiled (motor stops using current velocity 
             profile).
         """
-        pass
+        kcdc.CC_SetJogMode(self.serialno, jog_mode, stop_mode)
+        check_error(status)
 
-    @jog_stop_mode.setter
-    def jog_stop_mode(self, mode="profiled"):
-        pass
+    # @property
+    # def jog_stop_mode(self):
+    #     """
+    #     The stop mode for jog moves, either ``immediate`` (motor stops 
+    #     immediately) or ``profiled`` (motor stops using current velocity 
+    #         profile).
+    #     """
+    #     pass
+
+    # @jog_stop_mode.setter
+    # def jog_stop_mode(self, mode="profiled"):
+    #     pass
 
     @property
     def jog_step_size(self):
-        pass
+        kcdc.CC_GetJogStepSize(self.serialno, stepSize)
+        return stepSize
 
     @jog_step_size.setter
     def jog_step_size(self, step):
-        pass
+        """
+        stepSize is an unsigned int in device units
+
+        """
+        kcdc.CC_SetJogStepSize(self.serialno, stepSize)
+        check_error(status)
 
     @property
-    def jog_acceleration(self):
-        pass
+    def jog_velcocity_params(self):
+        kcdc.CC_GetJogVelParams(self.serialno, acceleration, maxVelocity)
+        return acceleration, maxVelocity
 
-    @jog_acceleration.setter
-    def jog_acceleration(self):
-        pass
+    @jog_velcocity_params.setter
+    def jog_velcocity_params(self):
+        kcdc.CC_SetJogVelParams(self.serialno, acceleration, maxVelocity)
+        check_error(status)
 
-    @property
-    def jog_velocity(self):
-        pass
+    # @property
+    # def jog_acceleration(self):
+    #     pass
 
-    @jog_velocity.setter
-    def jog_velocity(self, velocity):
-        pass
+    # @jog_acceleration.setter
+    # def jog_acceleration(self):
+    #     pass
+
+    # @property
+    # def jog_velocity(self):
+    #     pass
+
+    # @jog_velocity.setter
+    # def jog_velocity(self, velocity):
+    #     pass
 
     @property
     def motor_travel_limits(self):
@@ -296,6 +327,9 @@ class KDC101(KinesisInstrument):
         kcdc.CC_WaitForMessage(self._serialno, byref(message_type), byref(message_id), byref(message_data))
         while int(message_type.value) != 2 or int(message_id.value) != 0:
             kcdc.CC_WaitForMessage(self._serialno, byref(message_type), byref(message_id), byref(message_data))
+        # print(message_type)
+        # print(message_id)
+        # print(message_data)
 
     def reverse(self):
         status = kcdc.CC_SetDirection(self._serialno, True)
