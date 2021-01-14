@@ -29,4 +29,6 @@ class PRM1Z8(Motion, KDC101, HomingMixin):
     def __init__(self, serialno, polling=200):
         super().__init__(serialno, polling)
 
+    def rotate(self, percent):
+        pass
     
